@@ -19,7 +19,7 @@ class AudioVisualizer extends CustomPainter {
 
     for (int i = 0; i < waveform.length; i++) {
       double amplitude = waveform[i] / 80 * height;
-      double x = width - (i * barWidth); // Start from the right and move left
+      double x = i * barWidth; // Start from the right and move left
       double y1 = centerY - amplitude / 2;
       double y2 = centerY + amplitude / 2;
 

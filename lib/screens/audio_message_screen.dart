@@ -98,10 +98,10 @@
 // }
 
 import 'dart:async';
+import 'dart:io';
 import 'package:audio_recording/source/constants/app_colors.dart';
 import 'package:audio_recording/source/others/audio_visualizer.dart';
 import 'package:audio_recording/source/widgets/audio_message_item.dart';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -117,13 +117,14 @@ class AudioMessageScreen extends StatefulWidget {
 class _AudioMessageScreenState extends State<AudioMessageScreen> {
   final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
   final FlutterSoundPlayer _player = FlutterSoundPlayer();
-  final AudioPlayer _audioPlayer = AudioPlayer();
-  bool _isRecording = false;
-  List<AudioMessage> audioMessages = [];
+  final List<AudioMessage> _audioMessages = [];
   StreamSubscription? _recorderSubscription;
   StreamSubscription? _playerSubscription;
   List<double> _waveform = [];
+  int _duration = 0;
   int? currentPlayingMessage;
+  Timer? _timer;
+  String _timerString = "00.0";
 
   @override
   void initState() {
@@ -138,6 +139,7 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
     _player.closePlayer();
     _recorderSubscription?.cancel();
     _playerSubscription?.cancel();
+    _timer?.cancel();
     super.dispose();
   }
 
@@ -152,15 +154,14 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
       await _recorder.startRecorder(
         toFile: 'audio_${DateTime.now().millisecondsSinceEpoch}.aac',
       );
+      _startTimer();
       _recorderSubscription = _recorder.onProgress!.listen((e) {
         if (e.decibels != null) {
+          _duration += e.duration.inMicroseconds;
           setState(() {
             _waveform.add(e.decibels!);
           });
         }
-      });
-      setState(() {
-        _isRecording = true;
       });
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -169,62 +170,90 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
     }
   }
 
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(milliseconds: 1), (timer) {
+      setState(() {
+        _timerString =
+            (Duration(milliseconds: timer.tick).inMilliseconds / 1000)
+                .toStringAsFixed(1);
+      });
+    });
+  }
+
   Future<void> _stopRecording() async {
     var result = await _recorder.stopRecorder();
+    DateTime now = DateTime.now();
+    String formattedTime =
+        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+    final fileSize = await File(result!).length();
+    final audioSize = 1024 * 1024 < fileSize
+        ? '${(fileSize / (1024 * 1024)).toStringAsFixed(1)} MB'
+        : '${(fileSize / 1024).toStringAsFixed(1)} KB';
     setState(() {
-      _isRecording = false;
       if (result != null) {
-        audioMessages.insert(
-            0, AudioMessage(path: result, waveform: _waveform));
+        _audioMessages.insert(
+            0,
+            AudioMessage(
+                path: result,
+                waveform: _waveform,
+                duration: _duration,
+                timer: double.parse(_timerString).toInt(),
+                audioSize: audioSize,
+                recordedTime: formattedTime));
+        _duration = 0;
         _waveform = [];
       }
     });
+    _stopTimer();
     _recorderSubscription?.cancel();
+  }
+
+  void _stopTimer() {
+    _timer?.cancel();
+    setState(() {
+      _timerString = '00.0';
+    });
   }
 
   void _playCurrentRecording() async {
     if (_player.isPlaying) {
       await _player.pausePlayer();
       setState(() {
-        audioMessages[currentPlayingMessage!]._isPlaying = false;
+        _audioMessages[currentPlayingMessage!].audioState = AudioState.pause;
       });
     } else {
       await _player.resumePlayer();
       setState(() {
-        audioMessages[currentPlayingMessage!]._isPlaying = true;
+        _audioMessages[currentPlayingMessage!].audioState = AudioState.resume;
       });
     }
-    // await _player.startPlayer(
-    //   fromURI: audioMessages[index]._path,
-    //   codec: Codec.aacADTS,
-    // );
-    // _playerSubscription = _player.onProgress!.listen(onDone: (){
-    //   setState(() {
-    //     audioMessages[currentPlayingMessage!]._isPlaying = false;
-    //   });
-    // },(_) {});
   }
 
   void _playOtherRecording(int index) async {
     await _player.stopPlayer();
     if (currentPlayingMessage != null) {
       setState(() {
-        audioMessages[currentPlayingMessage!]._isPlaying = false;
+        _audioMessages[currentPlayingMessage!].audioState = AudioState.stop;
       });
     }
     currentPlayingMessage = index;
     setState(() {
-      audioMessages[index]._isPlaying = true;
+      _audioMessages[index].audioState = AudioState.start;
     });
     await _player.startPlayer(
-        fromURI: audioMessages[index]._path,
+        fromURI: _audioMessages[index].path,
         codec: Codec.aacADTS,
         whenFinished: () {
           setState(() {
-            audioMessages[index]._isPlaying = false;
+            _audioMessages[index].audioState = AudioState.stop;
           });
           currentPlayingMessage = null;
         });
+    if(!_audioMessages[index].beforeListened){
+      setState(() {
+        _audioMessages[index].beforeListened = true;
+      });
+    }
   }
 
   @override
@@ -244,8 +273,8 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
         child: ListView.separated(
             reverse: true,
             itemBuilder: (context, index) => AudioMessageItem(
-                  waveform: audioMessages[index]._waveform!,
-                  isPlaying: audioMessages[index]._isPlaying!,
+                  key: ValueKey(_audioMessages[index].path),
+                  audioMessage: _audioMessages[index],
                   onClick: () async {
                     if (currentPlayingMessage != null) {
                       if (index == currentPlayingMessage) {
@@ -261,7 +290,7 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
             separatorBuilder: (context, index) => const SizedBox(
                   height: 7,
                 ),
-            itemCount: audioMessages.length),
+            itemCount: _audioMessages.length),
       ),
       bottomNavigationBar: Container(
         color: AppColors.mainColor,
@@ -271,20 +300,25 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
         child: Padding(
             padding: const EdgeInsets.only(left: 16, right: 13),
             child: Row(children: [
-              DefaultTextStyle(style: TextStyle(color: AppColors.bottomIcons, fontSize: 14), child: Text("05.3")),
-              SizedBox(width: 15,),
+              DefaultTextStyle(
+                  style: TextStyle(color: AppColors.bottomIcons, fontSize: 14),
+                  child: Text(_timerString)),
+              SizedBox(
+                width: 15,
+              ),
               Expanded(
                   child: Container(
-                    decoration: BoxDecoration(
-                      border: Border.all(color: AppColors.bottomIcons, width: 2),
-                      borderRadius: BorderRadius.all(Radius.circular(5))
-                    ),
+                decoration: BoxDecoration(
+                    border: Border.all(color: AppColors.bottomIcons, width: 2),
+                    borderRadius: BorderRadius.all(Radius.circular(5))),
                 height: 40,
                 child: CustomPaint(
                   painter: AudioVisualizer(_waveform),
                 ),
               )),
-              SizedBox(width: 15,),
+              SizedBox(
+                width: 15,
+              ),
               Container(
                 width: 30,
                 height: 30,
@@ -312,16 +346,26 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
 }
 
 class AudioMessage {
-  String? _path;
-  List<double>? _waveform;
-  bool? _isPlaying;
+  String? path;
+  List<double>? waveform;
+  AudioState audioState;
+  int? duration;
+  int? timer;
+  String? audioSize;
+  String? recordedTime;
+  bool beforeListened;
 
   AudioMessage(
-      {required String path,
-      required List<double> waveform,
-      bool isPlaying = false}) {
-    _path = path;
-    _waveform = waveform;
-    _isPlaying = isPlaying;
-  }
+      {required this.path,
+      required this.waveform,
+      required this.duration,
+      required this.timer,
+      required this.audioSize,
+      required this.recordedTime,
+      this.beforeListened = false,
+      this.audioState = AudioState.stop});
+}
+
+enum AudioState{
+  start, pause, resume, stop
 }

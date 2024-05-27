@@ -5,4 +5,5 @@ class AppColors{
   static const Color secondaryColor = Color(0xFF16222e);
   static const Color mainColor = Color(0xFF252d3a);
   static const Color bottomIcons = Color(0xFF727f8f);
+  static const Color notPlay = Color(0xFF9792f2);
 }
