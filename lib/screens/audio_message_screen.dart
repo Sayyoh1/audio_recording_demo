@@ -27,6 +27,7 @@ class AudioMessageScreenState extends State<AudioMessageScreen>
   int _duration = 0;
   int? currentPlayingMessage;
   Timer? _timer;
+  bool _isRecordable = false;
   String _timerString = "00:00,0";
   late AnimationController _controller;
   late Animation<double> _animation;
@@ -61,7 +62,6 @@ class AudioMessageScreenState extends State<AudioMessageScreen>
   }
 
   Future<void> _startRecording() async {
-    await Permission.microphone.request();
     if (await Permission.microphone.isGranted) {
       await _recorder.startRecorder(
         toFile: 'audio_${DateTime.now().millisecondsSinceEpoch}.aac',
@@ -76,15 +76,22 @@ class AudioMessageScreenState extends State<AudioMessageScreen>
           });
         }
       });
-    } else {
+    } else if(await Permission.microphone.isPermanentlyDenied) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Microphone permission is required to record audio.'),
       ));
+    } else{
+      Permission.microphone.request();
     }
   }
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(milliseconds: 1), (timer) {
+      if(Duration(milliseconds: timer.tick).inSeconds >= 1){
+        setState(() {
+          _isRecordable = true;
+        });
+      }
       setState(() {
         _timerString =
             '${(Duration(milliseconds: timer.tick).inMinutes % 60).toString().padLeft(2, '0')}:${(Duration(milliseconds: timer.tick).inSeconds % 60).toString().padLeft(2, '0')},${(Duration(milliseconds: timer.tick).inMilliseconds % 1000) ~/ 100}';
@@ -94,29 +101,36 @@ class AudioMessageScreenState extends State<AudioMessageScreen>
 
   Future<void> _stopRecording() async {
     var result = await _recorder.stopRecorder();
-    DateTime now = DateTime.now();
-    String formattedTime =
-        "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
-    final fileSize = await File(result!).length();
-    final audioSize = 1024 * 1024 < fileSize
-        ? '${(fileSize / (1024 * 1024)).toStringAsFixed(1)} MB'
-        : '${(fileSize / 1024).toStringAsFixed(1)} KB';
-    List<String> divider = _timerString.split(",");
-    List<String> divider1 = divider.first.split(":");
-    int timer = int.parse(divider1.first) * 60 + int.parse(divider1.last);
-    setState(() {
-      _audioMessages.insert(
-          0,
-          AudioMessage(
-              path: result,
-              waveform: _waveform,
-              duration: _duration,
-              timer: timer,
-              audioSize: audioSize,
-              recordedTime: formattedTime));
-      _duration = 0;
-      _waveform = [];
-        });
+    if(_isRecordable){
+      DateTime now = DateTime.now();
+      String formattedTime =
+          "${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}";
+      final fileSize = await File(result!).length();
+      final audioSize = 1024 * 1024 < fileSize
+          ? '${(fileSize / (1024 * 1024)).toStringAsFixed(1)} MB'
+          : '${(fileSize / 1024).toStringAsFixed(1)} KB';
+      List<String> divider = _timerString.split(",");
+      List<String> divider1 = divider.first.split(":");
+      int timer = int.parse(divider1.first) * 60 + int.parse(divider1.last);
+      setState(() {
+        _audioMessages.insert(
+            0,
+            AudioMessage(
+                path: result,
+                waveform: _waveform,
+                duration: _duration,
+                timer: timer,
+                audioSize: audioSize,
+                recordedTime: formattedTime));
+      });
+    }else{
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Hold for at least 1 s to record audio.'),
+      ));
+    }
+    _duration = 0;
+    _waveform = [];
+    _isRecordable = false;
     _stopTimer();
     _controller.stop();
     _recorderSubscription?.cancel();
@@ -256,7 +270,9 @@ class AudioMessageScreenState extends State<AudioMessageScreen>
                         await _startRecording();
                       },
                       onLongPressEnd: (_) async {
-                        await _stopRecording();
+                        if(await Permission.microphone.isGranted){
+                          await _stopRecording();
+                        }
                       },
                       child: Icon(
                         _recorder.isRecording
