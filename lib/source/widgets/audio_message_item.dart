@@ -9,17 +9,17 @@ class AudioMessageItem extends StatefulWidget {
   final AudioMessage audioMessage;
   final Function() onClick;
 
-  AudioMessageItem({
-    Key? key,
+  const AudioMessageItem({
+    super.key,
     required this.audioMessage,
     required this.onClick,
-  }) : super(key: key);
+  });
 
   @override
-  _AudioMessageItemState createState() => _AudioMessageItemState();
+  AudioMessageItemState createState() => AudioMessageItemState();
 }
 
-class _AudioMessageItemState extends State<AudioMessageItem>
+class AudioMessageItemState extends State<AudioMessageItem>
     with SingleTickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _animation;
@@ -52,7 +52,7 @@ class _AudioMessageItemState extends State<AudioMessageItem>
     setState(() {
       _audioTimer = "00:00";
     });
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
         _elapsedSeconds = timer.tick;
         _audioTimer = _formatDuration(_elapsedSeconds);
@@ -65,7 +65,7 @@ class _AudioMessageItemState extends State<AudioMessageItem>
   }
 
   void _resumeTimer() {
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
       setState(() {
         _elapsedSeconds += 1;
         _audioTimer = _formatDuration(_elapsedSeconds);
@@ -120,7 +120,7 @@ class _AudioMessageItemState extends State<AudioMessageItem>
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: EdgeInsets.only(right: 5),
+      padding: const EdgeInsets.only(right: 5),
       alignment: Alignment.centerRight,
       child: Stack(
         children: [
@@ -130,14 +130,14 @@ class _AudioMessageItemState extends State<AudioMessageItem>
             width: 240,
             height: 100,
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Column(
                 children: [
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Padding(
-                        padding: EdgeInsets.only(top: 12),
+                        padding: const EdgeInsets.only(top: 12),
                         child: GestureDetector(
                           onTap: widget.onClick,
                           child: Container(
@@ -160,27 +160,27 @@ class _AudioMessageItemState extends State<AudioMessageItem>
                         ),
                       ),
                       Padding(
-                        padding: EdgeInsets.only(left: 10, top: 8),
+                        padding: const EdgeInsets.only(left: 10, top: 8),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             CustomPaint(
                               painter: AmplitudePainter(widget.audioMessage.waveform!, _animation.value),
-                              child: Container(
+                              child: const SizedBox(
                                 width: 148,
                                 height: 28,
                               ),
                             ),
-                            SizedBox(height: 6),
+                            const SizedBox(height: 6),
                             Row(
                               children: [
                                 Text(
                                   "${widget.audioMessage.audioSize!} - $_audioTimer",
-                                  style: TextStyle(fontSize: 12.0, color: Colors.white),
+                                  style: const TextStyle(fontSize: 12.0, color: Colors.white),
                                 ),
-                                SizedBox(width: 3),
+                                const SizedBox(width: 3),
                                 Padding(
-                                  padding: EdgeInsets.only(bottom: 2),
+                                  padding: const EdgeInsets.only(bottom: 2),
                                   child: Container(
                                     width: 6,
                                     height: 6,
@@ -204,22 +204,22 @@ class _AudioMessageItemState extends State<AudioMessageItem>
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           Padding(
-                            padding: EdgeInsets.only(bottom: 7),
+                            padding: const EdgeInsets.only(bottom: 7),
                             child: Text(
                               widget.audioMessage.recordedTime!,
-                              style: TextStyle(fontSize: 12.0, color: Colors.white),
+                              style: const TextStyle(fontSize: 12.0, color: Colors.white),
                             ),
                           ),
-                          SizedBox(width: 2),
+                          const SizedBox(width: 2),
                           SvgPicture.asset(
                             widget.audioMessage.beforeListened
                                 ? 'assets/svg/double_check.svg'
                                 : 'assets/svg/check.svg',
                             width: 20,
                             height: 20,
-                            colorFilter: ColorFilter.mode(Colors.white, BlendMode.srcIn),
+                            colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
                           ),
-                          SizedBox(width: 3),
+                          const SizedBox(width: 3),
                         ],
                       ),
                     ),

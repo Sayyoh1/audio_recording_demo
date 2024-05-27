@@ -1,4 +1,3 @@
-import 'dart:io';
 
 import 'package:audio_recording/source/constants/app_colors.dart';
 import 'package:flutter/material.dart';

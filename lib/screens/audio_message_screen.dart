@@ -1,106 +1,8 @@
-// import 'package:flutter/material.dart';
-//
-// void main() => runApp(MyApp());
-//
-// class MyApp extends StatelessWidget {
-//   @override
-//   Widget build(BuildContext context) {
-//     return MaterialApp(
-//       title: 'Transfer Animation',
-//       home: TransferAnimationDemo(),
-//     );
-//   }
-// }
-//
-// class TransferAnimationDemo extends StatefulWidget {
-//   @override
-//   _TransferAnimationDemoState createState() => _TransferAnimationDemoState();
-// }
-//
-// class _TransferAnimationDemoState extends State<TransferAnimationDemo>
-//     with SingleTickerProviderStateMixin {
-//   late AnimationController _controller;
-//   late Animation<double> _widthAnimation;
-//
-//   @override
-//   void initState() {
-//     super.initState();
-//     _controller = AnimationController(
-//       duration: const Duration(seconds: 3),
-//       vsync: this,
-//     );
-//
-//     _widthAnimation = Tween<double>(
-//       begin: 100.0,
-//       end: 0.0,
-//     ).animate(CurvedAnimation(
-//       parent: _controller,
-//       curve: Curves.easeInOut,
-//     ));
-//   }
-//
-//   @override
-//   void dispose() {
-//     _controller.dispose();
-//     super.dispose();
-//   }
-//
-//   @override
-//   Widget build(BuildContext context) {
-//     return Scaffold(
-//       appBar: AppBar(
-//         title: Text('Decreasing Width Transfer Animation'),
-//       ),
-//       body: Row(
-//         mainAxisAlignment: MainAxisAlignment.end,
-//         children: [
-//           Container(width: 20,color: Colors.amber,),
-//           Spacer(),
-//           AnimatedBuilder(
-//           animation: _controller,
-//           builder: (context, child) {
-//             return Container(
-//               width: _widthAnimation.value,
-//               height: 100,
-//               color: Colors.blue,
-//             );
-//           },
-//         ),]
-//       ),
-//       floatingActionButton: Row(
-//         mainAxisAlignment: MainAxisAlignment.end,
-//         children: [
-//           FloatingActionButton(
-//             onPressed: () {
-//               if (_controller.isAnimating) {
-//                 _controller.stop(canceled: false);
-//               } else{
-//                 if(_controller.isCompleted){
-//                   _controller..reset()..forward();
-//                 }else{
-//                   _controller.forward();
-//
-//                 }
-//               }
-//             },
-//             child: AnimatedBuilder(
-//               animation: _controller,
-//               builder: (context, child) {
-//                 return Icon(
-//                     _controller.isAnimating ? Icons.pause : Icons.play_arrow);
-//               },
-//             ),
-//           ),
-//         ],
-//       ),
-//     );
-//   }
-// }
-
 import 'dart:async';
 import 'dart:io';
 import 'package:audio_recording/source/constants/app_colors.dart';
 import 'package:audio_recording/source/others/audio_visualizer.dart';
+import 'package:audio_recording/source/others/recording_audio_visualizer.dart';
 import 'package:audio_recording/source/widgets/audio_message_item.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
@@ -111,10 +13,11 @@ class AudioMessageScreen extends StatefulWidget {
   const AudioMessageScreen({super.key});
 
   @override
-  _AudioMessageScreenState createState() => _AudioMessageScreenState();
+  AudioMessageScreenState createState() => AudioMessageScreenState();
 }
 
-class _AudioMessageScreenState extends State<AudioMessageScreen> {
+class AudioMessageScreenState extends State<AudioMessageScreen>
+    with SingleTickerProviderStateMixin {
   final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
   final FlutterSoundPlayer _player = FlutterSoundPlayer();
   final List<AudioMessage> _audioMessages = [];
@@ -124,13 +27,21 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
   int _duration = 0;
   int? currentPlayingMessage;
   Timer? _timer;
-  String _timerString = "00.0";
+  String _timerString = "00:00,0";
+  late AnimationController _controller;
+  late Animation<double> _animation;
 
   @override
   void initState() {
     super.initState();
     _initializeRecorder();
     _player.openPlayer();
+    _controller =
+        AnimationController(vsync: this, duration: const Duration(milliseconds: 650));
+    _animation = Tween<double>(begin: 0.7, end: 1.0).animate(_controller)
+      ..addListener(() {
+        setState(() {});
+      });
   }
 
   @override
@@ -140,6 +51,7 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
     _recorderSubscription?.cancel();
     _playerSubscription?.cancel();
     _timer?.cancel();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -155,6 +67,7 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
         toFile: 'audio_${DateTime.now().millisecondsSinceEpoch}.aac',
       );
       _startTimer();
+      _controller.repeat(reverse: true);
       _recorderSubscription = _recorder.onProgress!.listen((e) {
         if (e.decibels != null) {
           _duration += e.duration.inMicroseconds;
@@ -174,8 +87,7 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
     _timer = Timer.periodic(const Duration(milliseconds: 1), (timer) {
       setState(() {
         _timerString =
-            (Duration(milliseconds: timer.tick).inMilliseconds / 1000)
-                .toStringAsFixed(1);
+            '${(Duration(milliseconds: timer.tick).inMinutes % 60).toString().padLeft(2, '0')}:${(Duration(milliseconds: timer.tick).inSeconds % 60).toString().padLeft(2, '0')},${(Duration(milliseconds: timer.tick).inMilliseconds % 1000) ~/ 100}';
       });
     });
   }
@@ -189,29 +101,31 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
     final audioSize = 1024 * 1024 < fileSize
         ? '${(fileSize / (1024 * 1024)).toStringAsFixed(1)} MB'
         : '${(fileSize / 1024).toStringAsFixed(1)} KB';
+    List<String> divider = _timerString.split(",");
+    List<String> divider1 = divider.first.split(":");
+    int timer = int.parse(divider1.first) * 60 + int.parse(divider1.last);
     setState(() {
-      if (result != null) {
-        _audioMessages.insert(
-            0,
-            AudioMessage(
-                path: result,
-                waveform: _waveform,
-                duration: _duration,
-                timer: double.parse(_timerString).toInt(),
-                audioSize: audioSize,
-                recordedTime: formattedTime));
-        _duration = 0;
-        _waveform = [];
-      }
-    });
+      _audioMessages.insert(
+          0,
+          AudioMessage(
+              path: result,
+              waveform: _waveform,
+              duration: _duration,
+              timer: timer,
+              audioSize: audioSize,
+              recordedTime: formattedTime));
+      _duration = 0;
+      _waveform = [];
+        });
     _stopTimer();
+    _controller.stop();
     _recorderSubscription?.cancel();
   }
 
   void _stopTimer() {
     _timer?.cancel();
     setState(() {
-      _timerString = '00.0';
+      _timerString = '00:00,0';
     });
   }
 
@@ -249,7 +163,7 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
           });
           currentPlayingMessage = null;
         });
-    if(!_audioMessages[index].beforeListened){
+    if (!_audioMessages[index].beforeListened) {
       setState(() {
         _audioMessages[index].beforeListened = true;
       });
@@ -268,7 +182,7 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
         centerTitle: true,
       ),
       body: Container(
-        padding: EdgeInsets.symmetric(vertical: 10),
+        padding: const EdgeInsets.symmetric(vertical: 10),
         color: AppColors.secondaryColor,
         child: ListView.separated(
             reverse: true,
@@ -298,46 +212,62 @@ class _AudioMessageScreenState extends State<AudioMessageScreen> {
         height: 55,
         alignment: Alignment.centerRight,
         child: Padding(
-            padding: const EdgeInsets.only(left: 16, right: 13),
+            padding: const EdgeInsets.only(left: 20, right: 13),
             child: Row(children: [
               DefaultTextStyle(
-                  style: TextStyle(color: AppColors.bottomIcons, fontSize: 14),
+                  style: const TextStyle(color: AppColors.bottomIcons, fontSize: 14),
                   child: Text(_timerString)),
-              SizedBox(
-                width: 15,
+              const SizedBox(
+                width: 20,
               ),
-              Expanded(
-                  child: Container(
+              Container(
                 decoration: BoxDecoration(
                     border: Border.all(color: AppColors.bottomIcons, width: 2),
-                    borderRadius: BorderRadius.all(Radius.circular(5))),
+                    borderRadius: const BorderRadius.all(Radius.circular(5))),
                 height: 40,
+                width: 235,
                 child: CustomPaint(
                   painter: AudioVisualizer(_waveform),
                 ),
-              )),
-              SizedBox(
+              ),
+              const SizedBox(
                 width: 15,
               ),
-              Container(
-                width: 30,
-                height: 30,
-                child: GestureDetector(
-                  onLongPressStart: (_) async {
-                    await Vibration.vibrate(duration: 50);
-                    await _startRecording();
-                  },
-                  onLongPressEnd: (_) async {
-                    _stopRecording();
-                  },
-                  child: Icon(
-                    _recorder.isRecording
-                        ? Icons.stop
-                        : Icons.mic_none_outlined,
-                    size: 30,
-                    color: AppColors.bottomIcons,
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  const SizedBox(
+                    width: 55,
+                    height: 55,
                   ),
-                ),
+                  CustomPaint(
+                    painter: CircularVisualizerPainter(_animation.value),
+                    child: SizedBox(
+                      width: _recorder.isRecording ? 55 : 0,
+                      height: _recorder.isRecording ? 55 : 0,
+                    ),
+                  ),
+                  SizedBox(
+                    width: 30,
+                    height: 30,
+                    child: GestureDetector(
+                      onLongPressStart: (_) async {
+                        await Vibration.vibrate(duration: 50);
+                        await _startRecording();
+                      },
+                      onLongPressEnd: (_) async {
+                        await _stopRecording();
+                      },
+                      child: Icon(
+                        _recorder.isRecording
+                            ? Icons.stop
+                            : Icons.mic_none_outlined,
+                        size: 30,
+                        color: _recorder.isRecording ? Colors.white : AppColors.bottomIcons,
+                      ),
+                    ),
+                  )
+                ],
               )
             ])),
       ),
@@ -366,6 +296,4 @@ class AudioMessage {
       this.audioState = AudioState.stop});
 }
 
-enum AudioState{
-  start, pause, resume, stop
-}
+enum AudioState { start, pause, resume, stop }
