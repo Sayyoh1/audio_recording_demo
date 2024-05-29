@@ -1,6 +1,6 @@
-# audio_recording
+# audio_recording_demo
 
-A new Flutter project.
+A new Flutter project like telegram audio message without architecture.
 
 ## Getting Started
 
